@@ -7,7 +7,6 @@ output: github_document
 
 ```{r setup, include = FALSE}
 library(tidyverse)
-library(viridis)
 library(modelr)
 library(purrr)
 
@@ -48,13 +47,11 @@ birthweight = birthweight %>%
     mrace = factor(mrace, ordered = FALSE)
   ) %>%
   relocate(bwt)
-
-birthweight
 ```
 
 Propose a regression model for birthweight.
 
-```{r}
+```{r model_1}
 model_1 = lm(bwt ~ babysex + wtgain, data = birthweight)
 
 birthweight %>% 
@@ -67,7 +64,7 @@ birthweight %>%
     title = "Model 1 Residuals Against Fitted Values",
     x = "Fitted Values",
     y = "Residuals",
-    caption = "Data From birthweight"
+    caption = "Data from birthweight"
   )
 ```
 
@@ -75,29 +72,27 @@ I made this model by hypothesizing that birth weight is associated with baby’s
 
 Compare the model to two others.
 
-```{r}
+```{r cross_validation, message = FALSE}
 model_2 = lm(bwt ~ blength + gaweeks, data = birthweight)
 
 model_3 = lm(bwt ~ bhead + blength + babysex + bhead * blength + bhead * babysex + blength * babysex + bhead * blength * babysex, data = birthweight)
 
-cv_df = crossv_mc(birthweight, 100)
-
-cv_df =
-  cv_df %>%
-   mutate(
+cv_df = 
+  crossv_mc(birthweight, 100) %>%
+  mutate(
     train = map(train, as_tibble),
     test = map(test, as_tibble))
 
 cv_df = 
   cv_df %>% 
   mutate(
-    mod_1 = map(train, ~lm(bwt ~ babysex + wtgain, data = .x)),
-    mod_2 = map(train, ~lm(bwt ~ blength + gaweeks, data = .x)),
-    mod_3 = map(train, ~lm(bwt ~ bhead + blength + babysex + bhead * blength + bhead * babysex + blength * babysex + bhead * blength * babysex, data = as_tibble(.x)))) %>% 
+    mod_1 = map(.x = train, ~lm(bwt ~ babysex + wtgain, data = .x)),
+    mod_2 = map(.x = train, ~lm(bwt ~ blength + gaweeks, data = .x)),
+    mod_3 = map(.x = train, ~lm(bwt ~ bhead + blength + babysex + bhead * blength + bhead * babysex + blength * babysex + bhead * blength * babysex, data = .x))) %>% 
   mutate(
-    rmse_1 = map2_dbl(mod_1, test, ~rmse(model = .x, data = .y)),
-    rmse_2 = map2_dbl(mod_2, test, ~rmse(model = .x, data = .y)),
-    rmse_3 = map2_dbl(mod_3, test, ~rmse(model = .x, data = .y)))
+    rmse_1 = map2_dbl(.x = mod_1, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_2 = map2_dbl(.x = mod_2, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_3 = map2_dbl(.x = mod_3, .y = test, ~rmse(model = .x, data = .y)))
 
 cv_df %>% 
   select(starts_with("rmse")) %>% 
@@ -133,16 +128,11 @@ weather_df =
     tmin = tmin / 10,
     tmax = tmax / 10) %>%
   select(name, id, everything())
-
-weather_df
 ```
 
-Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for est.r.squared and log(est.beta0 * est.beta1).
+Use 5000 bootstrap samples and, for each bootstrap sample, produce estimates of r̂2 and log(β̂0∗β̂1). Plot the distribution of your estimates, and describe these in words.
 
-```{r confidence_interval, message = FALSE}
-lm(tmax ~ tmin, data = weather_df) %>%
-  broom::tidy()
-
+```{r estimates_and_distribution, message = FALSE}
 bootstrap_rsquared =
   weather_df %>% 
   modelr::bootstrap(n = 5000) %>% 
@@ -151,12 +141,17 @@ bootstrap_rsquared =
     results = map(models, broom::glance)) %>% 
   select(-strap, -models) %>% 
   unnest(results) %>%
-  summarize(
-    ci_lower = quantile(r.squared, 0.025), 
-    ci_upper = quantile(r.squared, 0.975)
-  )
+  select(.id, r.squared)
 
-bootstrap_rsquared
+bootstrap_rsquared %>%
+  ggplot(aes(r.squared)) +
+  geom_density() +
+  labs(
+    title = "The Distribution of R^2 By Bootstrap",
+    x = "R^2",
+    y = "Density",
+    caption = "Data from 2017 Central Park weather data"
+  )
 
 bootstrap_log_betas =
   weather_df %>%
@@ -173,12 +168,34 @@ bootstrap_log_betas =
   ) %>%
   mutate(
     log_betas = log(`(Intercept)` * tmin)
-  ) %>%
+  )
+
+bootstrap_log_betas %>%
+  ggplot(aes(log_betas)) +
+  geom_density() +
+  labs(
+    title = "The Distribution of Log(B0 * B1) By Bootstrap",
+    x = "Log(B0 * B1)",
+    y = "Density",
+    caption = "Data from 2017 Central Park weather data"
+  )
+```
+
+The distribution of r.squared is approximately normal but moderately left skewed with the highest density between r.squared = 0.91 and 0.92. By the definition of r.squared, the model fits the data well. The distribution of log(beta0 * beta1) is approximately normal with the highest density between log(beta0 * beta1) = 2.00 and 2.025. The skewness is less obvious than that of r.squared. To improve the distribution plot, we could try more bootstrap samples.
+
+Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for r̂2 and log(β̂0∗β̂1).
+
+```{r confidence_interval, message = FALSE}
+bootstrap_rsquared %>%
+  summarize(
+    ci_lower = quantile(r.squared, 0.025), 
+    ci_upper = quantile(r.squared, 0.975)
+  )
+
+bootstrap_log_betas %>%
   summarize(
     ci_lower = quantile(log_betas, 0.025), 
     ci_upper = quantile(log_betas, 0.975)
   )
-
-bootstrap_log_betas
 ```
 

@@ -119,4 +119,66 @@ cv_df %>%
 
 ## Problem 2
 
+Load the 2017 Central Park weather data.
+
+```{r load_data, message = FALSE}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
+
+weather_df
+```
+
+Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for est.r.squared and log(est.beta0 * est.beta1).
+
+```{r confidence_interval, message = FALSE}
+lm(tmax ~ tmin, data = weather_df) %>%
+  broom::tidy()
+
+bootstrap_rsquared =
+  weather_df %>% 
+  modelr::bootstrap(n = 5000) %>% 
+  mutate(
+    models = map(strap, ~lm(tmax ~ tmin, data = .x) ),
+    results = map(models, broom::glance)) %>% 
+  select(-strap, -models) %>% 
+  unnest(results) %>%
+  summarize(
+    ci_lower = quantile(r.squared, 0.025), 
+    ci_upper = quantile(r.squared, 0.975)
+  )
+
+bootstrap_rsquared
+
+bootstrap_log_betas =
+  weather_df %>%
+  modelr::bootstrap(n = 5000) %>% 
+  mutate(
+    models = map(strap, ~lm(tmax ~ tmin, data = .x) ),
+    results = map(models, broom::tidy)) %>% 
+  select(-strap, -models) %>% 
+  unnest(results) %>%
+  select(.id, term, estimate) %>%
+  pivot_wider(
+    names_from = "term",
+    values_from = "estimate"
+  ) %>%
+  mutate(
+    log_betas = log(`(Intercept)` * tmin)
+  ) %>%
+  summarize(
+    ci_lower = quantile(log_betas, 0.025), 
+    ci_upper = quantile(log_betas, 0.975)
+  )
+
+bootstrap_log_betas
+```
 

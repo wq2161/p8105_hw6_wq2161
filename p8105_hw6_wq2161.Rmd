@@ -68,7 +68,7 @@ birthweight %>%
   )
 ```
 
-I made this model by hypothesizing that birth weight is associated with baby’s sex and mother’s weight gain during pregnancy.
+I made this model by hypothesizing that birth weight is associated with baby’s sex and mother’s weight gain during pregnancy. I chose baby's sex as a predictor because the average birth weight of male newborn is greater than female. Besides, a study shows that "Maternal weight gain during pregnancy increases birth weight independent of genetic factors", thus I chose mother's weight gain during pregnancy as another predictor.
 
 Compare the model to two others.
 
